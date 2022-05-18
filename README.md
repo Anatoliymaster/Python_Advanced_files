@@ -615,7 +615,8 @@ https://video.ittensive.com/python-advanced/russia.json
 
 ### Решение: 
 
-```%matplotlib inline
+```python 
+%matplotlib inline
 import matplotlib.pyplot as plt
 import geopandas as gpd
 import pandas as pd
@@ -672,6 +673,88 @@ print (geo[geo["NL_NAME_1"] == "АЛТАЙСКИЙ КРАЙ"]["Объект"])
 11    4480
 Name: Объект, dtype: int64
 ```
+![Culture](https://user-images.githubusercontent.com/96381562/169081042-5b7d2209-9700-45dc-b1e9-8dc1bb3f44ca.png)
+____
 
-Посчитайте число объектов культурного наследия в Татарстане.
+#### 13. Задание: сборка PDF документа.
+
+Используя данные по посещаемости библиотек в районах Москвы
+https://video.ittensive.com/python-advanced/data-7361-2019-11-28.utf.json
+постройте круговую диаграмму суммарной посещаемости (NumOfVisitors) 20 наиболее популярных районов Москвы.
+Создайте PDF отчет, используя файл
+https://video.ittensive.com/python-advanced/title.pdf
+как первую страницу. На второй странице выведите итоговую диаграмму, 
+самый популярный район Москвы и число посетителей библиотек в нем.
+
+### Решение: 
+
+```python
+matplotlib inline
+from reportlab.pdfgen import canvas
+from reportlab.lib import pagesizes
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
+from reportlab.lib.utils import ImageReader
+from PyPDF2 import PdfFileMerger, PdfFileReader
+import requests
+import json
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+def extract_district (x):
+    return list(map(lambda a: a["District"], x))[0]
+
+r = requests.get("https://video.ittensive.com/python-advanced/data-7361-2019-11-28.utf.json")
+Т.к. данные в формате json, поэтому их сначала загружаем и передаем в  фрейм данных.  Заполним отсутствующие значения нулями .fillna: 
+data = pd.DataFrame(json.loads(r.content)).fillna(value=0)
+
+Первая сложность в том, что названия района скрыто в поле District, которое само по себе яв-ся json, разобранный в словарь, т.е.  каждое значение в серии данных это еще один набор значений в виде словаря. Для группировки по районам нужно извлечь названия района из этой структуры для этого мы создали отдельную функцию. Эта функция извлечения района будет брать значении серии Object Adress,  находить в этом значении поле District и затем приводить это поле к списку и из этого списка возвращать первое значение. Т.е  по факту будет вычленять первый найденный District из словаря ObjectAdress:
+data["District"] = data["ObjectAddress"].apply(extract_district)
+
+После получения района для всех значений данных можно сгруппировать по нему и отсортировать по числу посетителей библиотек по убыванию: 
+data_sum = data.groupby("District").sum().sort_values("NumOfVisitors", ascending=False)
+
+Создадим результирующую круговую диаграмму из 20 самых популярных районов:
+
+fig = plt.figure(figsize=(11,6))
+area = fig.add_subplot(1, 1, 1)
+
+data_sum[0:20]["NumOfVisitors"].plot.pie(ax = area,
+                                        labels=[""]*20, 	 # для большей читабельности удерем районы из подписей на диаграмме, задав пустые labels
+                                         # ровно по числу районов (20)
+                                        label="Посещаемость",
+                                        cmap="tab20")
+
+перенесем все районы в легенду (это будет индекс из набора данных). Легенда выйдет справа от диаграммы, задав bbox_to_anchor=(1.5,1,0.1,0))   - сдивнем по оси х 1.5, по оси у задали 1(прижали к верхней границе), также задали 0, нулевая ширина,  чтобы легенда графика корректоно отрисовалась: 
+
+plt.legend(data_sum[0:20].index,
+          bbox_to_anchor=(1.5,1,0.1,0)) 
+plt.savefig("readers.png") 	# сохраняем файл для дальнейшей вставки
+
+Сформируем отчет:
+
+pdfmetrics.registerFont(TTFont("Trebuchet", "D://Обучение уроки//Продвинутый PYTHON//Часть 4 ОТЧЕТЫ И АВТОМАТИЗАЦИЯ//Глава 1. Работа с PDF//Trebuchet.ttf"))
+PDF = canvas.Canvas("readers.pdf", pagesize=pagesizes.A4)
+PDF.setFont("Trebuchet", 48)
+PDF.drawString(70, 650, "Посетители библиотек")
+PDF.drawString(80, 590, "по районам Москвы")
+PDF.setFont("Trebuchet", 13)
+PDF.drawString(550, 820, "2") # 2 страница отчета 
+PDF.drawImage(ImageReader("readers.png"), -200, 150) # вставляем круговую диаграмма
+PDF.setFont("Trebuchet", 20)
+PDF.drawString(100, 150, "Самый популярный район")
+PDF.setFont("Trebuchet", 24)
+PDF.drawString(100, 120, data_sum.index.get_values()[0]) # выбираем самый популярный район 
+PDF.setFont("Trebuchet", 20)
+PDF.drawString(100, 90,
+               "Посетителей: " + str(int(data_sum["NumOfVisitors"].values[0]))) # выведем число посетителей по первому нашему кортежу
+# Это и сеть ответ задачи
+PDF.save()
+files = ["D://Обучение уроки//Продвинутый PYTHON//Часть 4 ОТЧЕТЫ И АВТОМАТИЗАЦИЯ//Глава 1. Работа с PDF//title.pdf", "readers.pdf"]
+merger = PdfFileMerger()
+for filename in files:
+    merger.append(PdfFileReader(open(filename, "rb")))
+merger.write("report.pdf")
+```
 
