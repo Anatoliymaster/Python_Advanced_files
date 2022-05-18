@@ -908,6 +908,137 @@ Loading headers and footers (5/6)
 Printing pages (6/6)
 Done   
 ```
+![final](https://user-images.githubusercontent.com/96381562/169085315-82a92bed-edd0-4a86-b645-28985fb582b4.png)
+____
+
+#### 16. Задание: автоматические отчеты.
+
+Соберите отчет по результатам ЕГЭ в 2018-2019 году, используя данные
+https://video.ittensive.com/python-advanced/data-9722-2019-10-14.utf.csv
+и отправьте его в HTML формате по адресу support@ittensive.com, используя только Python.
+В отчете должно быть:
+* общее число отличников (учеников, получивших более 220 баллов по ЕГЭ в Москве),
+* распределение отличников по округам Москвы,
+* название школы с лучшими результатами по ЕГЭ в Москве.
+* Диаграмма распределения должна быть вставлена в HTML через data:URI формат (в base64-кодировке).
+
+### Решение: 
+
+```python
+import pandas as pd
+import matplotlib.pyplot as plt
+import pdfkit
+from io import BytesIO
+import binascii
+import smtplib
+from email import encoders
+from email.mime.text import MIMEText 
+from email.mime.base import MIMEBase 
+from email.mime.multipart import MIMEMultipart
+
+data = pd.read_csv("https://video.ittensive.com/python-advanced/data-9722-2019-10-14.utf.csv", delimiter = ";")
+
+# по условию задачи выделим 2018-2019 года по условию задачи. Сначала сделаем все преобразования с данными и только потом вставим  результаты в отчет:
+data = data[data["YEAR"] == "2018-2019"]
+
+# Сначала нужно найти лучшую школу по результатам ЕГЭ - возьмем первое значение из сортированных значений по уменьшению (ascending = False).head(1) по колонке PASSES_OVER_220:
+data_best = data.sort_values("PASSES_OVER_220", ascending = False).head(1)
+
+# Сгруппируем по административному округу(предварительно уберем из названий административного округа все слова, кроме первого)  для того, чтобы подписи данных были короче и красивее:
+
+data["AdmArea"] = data["AdmArea"].apply(lambda x: x.split(" ")[0])
+# Сортировку значений по адм округам мы выполнили только для того, чтобы 2 самых маленьких значений (2 самых малочисленных округа)  на графике вынести из графика, чтобы подписи поместились. 
+
+# Посчитаем общее количество отличников, нужно для отчета и вывода доли
+data_adm = data.groupby("AdmArea").sum()["PASSES_OVER_220"].sort_values()
+total = data_adm.sum()
+
+# Далее приступим к визуализации, создадим холст и зададим список explode - список секторов и меру выноса из основной диаграммы, чтобы показать, что эти округа самые малочисленные:
+
+fig = plt.figure(figsize=(11,6))
+area = fig.add_subplot(1,1,1)
+explode = [0]*len(data_adm)
+explode[0] = 0.4
+explode[1] = 0.4
+
+
+# создадим круговую диаграмму по округам по числу округов
+data_adm.plot.pie(ax=area, 
+                labels=[""]*len(data_adm),
+                 label="Отличники по ЕГЭ",
+                 cmap="tab20",
+                 autopct=lambda x:int(round(total * x/100)),
+                 pctdistance=0.9,
+                 explode=explode)
+plt.legend(data_adm.index, bbox_to_anchor=(1.5, 1, 0.1, 0)) # легенда с подписями округов
+img = BytesIO() # создаем объект памяти для изображения и сохраним в изображение
+plt.savefig(img)
+
+# для вставки изображения в отчет преобразем его в формат base64:
+img = 'data:image/png;base64,' + binascii.b2a_base64(img.getvalue(),
+                                newline=False).decode("UTF-8")
+
+# для корректного вывода длинного названия школы зададим настройку pandas по длине колонки  
+pd.set_option("display.max_colwidth", 1000)
+
+# Сформируем html отчет со всем данными:
+
+html ='''<html>
+<head>
+    <title>Результаты по ЕГЭ по Млскве: отличники</title>
+    <meta charset= "utf-8/">
+</head>
+<body>
+    <h1>Результаты ЕГЭ Москвы: отличники в 2018-2019 году</h1>
+    <p>Всего: ''' + str(total) + '''</p>
+    <img src=" ''' + img + '''" alt="Отличники по округам"/>
+    <p>Лучшая школа: ''' + str(data_best["EDU_NAME"].values[0]) + '''</p>
+</body>
+<html>'''
+
+# сформируем pdf отчет из html кода
+
+config = pdfkit.configuration(wkhtmltopdf="C:/Program Files/wkhtmltopdf/bin/wkhtmltopdf.exe")
+options = {
+    "page-size": "A4",
+    "header-right": "[page]"
+}
+
+# вызовем генерацию  pdf документа из строки и сохраним его в файл ege.best.pdf:
+pdfkit.from_string(html, 'ege.best.pdf',
+                  configuration=config, options=options)
+
+
+# начнем подготовку отправки письма с отчетами. Создадим новый объект и зададим поля 
+# From, Subject, Content-Type, To
+
+letter = MIMEMultipart()
+letter["From"] = "anatoliy.masterr@gmail.com"
+letter["Subject"] = "Результаты по ЕГЭ в Москве"
+letter["Content-Type"] = "text/html; charset=utf-8"
+letter["To"] = "anatoli.evdokimow@yandex.ru"
+
+# прикрепляем html документ в тело письма и вложим pdf отчет:
+letter.attach(MIMEText(html, "html"))
+attachement = MIMEBase("application", "pdf")
+attachement.set_payload(open("ege.best.pdf", "rb").read())
+attachement.add_header("Content-Disposition",
+                      'attachement; filename="ege.best.pdf"')
+encoders.encode_base64(attachement)
+letter.attach(attachement)
+
+# далее подключимся к почтовому серверу и отправим письмо:
+
+user = 'anatoliy.masterr@gmail.com'
+password = "teaching_python2022"
+server = smtplib.SMTP("smtp.gmail.com", 587)
+server.starttls()
+server.login(user, password)
+server.sendmail("anatoliy.masterr@gmail.com",
+               "anatoli.evdokimow@yandex.ru",
+               letter.as_string())
+server.quit()
+```
 
 
 
