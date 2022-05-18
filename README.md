@@ -1039,6 +1039,6 @@ server.sendmail("anatoliy.masterr@gmail.com",
                letter.as_string())
 server.quit()
 ```
-
+![Email](https://user-images.githubusercontent.com/96381562/169086083-f18ea1c3-b1d5-4d36-b8ae-ff0c8d4611e6.png)
 
 
