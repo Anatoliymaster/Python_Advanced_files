@@ -456,7 +456,7 @@ total = sum(data_district)
 data_district.plot.pie(ax=area, label="", autopct=lambda x:int(round(total * x/100)))
 plt.show()
 
-![Результаты по ЕГЭ](https://github.com/Anatoliymaster/Python_Advanced_files/blob/main/%D0%A0%D0%B5%D0%B7%D1%83%D0%BB%D1%8C%D1%82%D0%B0%D1%82%D1%8B%20%D0%BF%D0%BE%20%D0%95%D0%93%D0%AD.jpg)
+![Результаты по ЕГЭ]([https:\C:\Users\Anatoliy\Desktop\test\Результаты по ЕГЭ](https://github.com/Anatoliymaster/Python_Advanced_files/blob/main/%D0%A0%D0%B5%D0%B7%D1%83%D0%BB%D1%8C%D1%82%D0%B0%D1%82%D1%8B%20%D0%BF%D0%BE%20%D0%95%D0%93%D0%AD.jpg?raw=true)
 ```
 _____
 
