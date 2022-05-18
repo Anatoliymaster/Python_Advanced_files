@@ -757,4 +757,157 @@ for filename in files:
     merger.append(PdfFileReader(open(filename, "rb")))
 merger.write("report.pdf")
 ```
+![pdf](https://user-images.githubusercontent.com/96381562/169082249-0b5d3c08-85fc-4bfe-aa16-5a8acc640408.png)
+____
+
+#### 14. Задание: геральдические символы Москвы
+
+Сгенерируйте PDF документ из списка флагов и гербов районов Москвы:
+https://video.ittensive.com/python-advanced/data-102743-2019-11-13.utf.csv
+На каждой странице документа выведите название геральдического символа (Name), его описание (Description) и его изображение (Picture).
+Для показа изображений используйте адрес
+https://op.mos.ru/MEDIA/showFile?id=XXX
+где XXX - это значение поля Picture в наборе данных. 
+
+### Решение: 
+
+```python
+
+Сгенерируем PDF документ из списка флагов и гербов районов Москвы: https://video.ittensive.com/python-advanced/data-102743-2019-11-13.utf.csv На каждой странице документа выведите название геральдического символа (Name), его описание (Description) и его изображение (Picture). Для показа изображений используйте адрес https://op.mos.ru/MEDIA/showFile?id=XXX где XXX - это значение поля Picture в наборе данных. Например: https://op.mos.ru/MEDIA/showFile?id=8466da35-6801-41a9-a71e-04b60408accb В случае возникновения проблем с загрузкой изображений с op.mos.ru можно добавить в код настройку для форсирования использования дополнительных видов шифрования в протоколе SSL/TLS. requests.packages.urllib3.util.ssl_.DEFAULT_CIPHERS = 'ALL:@SECLEVEL=1'
+
+Формирование pdf отчета из набора данных. Требуется правильно сформировать html документ. 
+Сначала откроем заголовок и откроем содержание. В заголовке будут Геральдические символы Москвы и meta cherset="utf-8". Добавляем страничный вывод данных. Можно использовать разного уровня заголовки и создать для них стили. Можно вывести заголовки одного уровня и создать стили для всех, кроме первого(будем использовать второй вариант)
+Переберм в цикле набор данных (for i, item in data.iterrows():, и только для первого элемента(заголовка) мы не будем задавать стиль. А для всех остальный зададим, вставим разрыв страницы после первого заголовка
+(html += '<h1 style="page-break-before:always">' + item['Name'] + '</h1>'). Т.о. получим каждый геральдический символ с названием на отдельной странице:
+    После вывода заголовка, который будет обеспечивать разрыв страницы выведем изображение геральдического символа в увеличенном виде. Для этого используем атрибут style и свойство width и margin-left (отступ слева, поле слева). Источник изображения - src=... в нужном формате и добавим к нему значения поля(столбца) Picture из исходных данных
+    ''<p>
+        <img style="width:80%;margin-left:10%"
+        src="https://op.mos.ru/MEDIA/showFile?id=''' + item['Picture'] + '''">
+    </p>'''
+Далее выведем описание символа и увеличим шрифт в 1,5 раза- '<p style="font-size:150%"> и добавим свойство Description у кортежа. HTML готов для формирования.
+        Зададим размер страницы и вывод каждой страницы отдельно  'page-size': 'A4', 'header-right': '[page]' 
+	и сгенерируем из строки через .from_string сохраним, имя файла.
+
+
+import pandas as pd
+import pdfkit
+data = pd.read_csv("https://video.ittensive.com/python-advanced/data-102743-2019-11-13.utf.csv", delimiter=";")
+html = '''<html>
+<head>
+    <title>Геральдические символы Москвы</title>
+    <meta charset="utf-8"/>
+</head>
+<body>'''
+for i, item in data.iterrows():
+    if i == 0:
+        html += '<h1>' + item['Name'] + '</h1>'
+    else:
+        html += '<h1 style="page-break-before:always">' + item['Name'] + '</h1>'
+    html += '''<p>
+        <img style="width:80%;margin-left:10%"
+        src="https://op.mos.ru/MEDIA/showFile?id=''' + item['Picture'] + '''">
+    </p>'''
+    html += '<p style="font-size:150%">' + item['Description'] + '</p>'
+html += '</body></html>'
+
+config = pdfkit.configuration(wkhtmltopdf='C:/Program Files/wkhtmltopdf/bin/wkhtmltopdf.exe')
+options = {
+    'page-size': 'A4',
+    'header-right': '[page]'
+}
+pdfkit.from_string(html, 'heraldic.pdf',
+                    configuration=config, options=options)
+		    
+Loading pages (1/6)
+Counting pages (2/6)                                               
+Resolving links (4/6)                                                       
+Loading headers and footers (5/6)                                           
+Printing pages (6/6)
+Done  
+```
+____
+
+#### 15. Задание: многостраничный отчет.
+
+Используя данные по активностям в парках Москвы
+https://video.ittensive.com/python-advanced/data-107235-2019-12-02.utf.json
+Создайте PDF отчет, в котором выведите:
+1. Диаграмму распределения числа активностей по паркам, топ10 самых активных
+2. Таблицу активностей по всем паркам в виде Активность-Расписание-Парк
+
+###  Решение: 
+
+```python 
+import requests
+import json 
+import pandas as pd
+import matplotlib.pyplot as plt
+from io import BytesIO
+import binascii
+import pdfkit
+
+Загружаем данные в датафрейм,  возьмем 3 только колонки для вывода отчета  извлекаем названия парка из серии через лямбду функцию (получаем значения поля value у словаря) data["NameofPark"].apply(lambda x: x["value"]):
+
+r = requests.get("https://video.ittensive.com/python-advanced/data-107235-2019-12-02.utf.json")
+data = pd.DataFrame(json.loads(r.content),
+                   columns=["CourseName", "CoursesTimetable", "NameOfPark"])
+data["NameOfPark"] = data["NameOfPark"].apply(lambda x: x["value"])
+
+Переименуем колонки для отчета.
+data.columns = ["Активность", "Расписание", "Парк"]
+
+Для ответа на поставленный вопрос найдем активность Тайцзицюань и выведем число записей с этой активностью: активность равна 1
+print("Тайцзицюань: ",
+     data[data["Активность"].str.contains("Тайцзицюань")]["Активность"].count())
+fig = plt.figure(figsize=(12, 6))
+area = fig.add_subplot(1,1,1)
+
+Сгруппируем по названию парков по убыванию, чтобы всзять первые 20 значений (самые активные парки и нанести их в круговую диаграмму)
+parks = data.groupby("Парк").count().sort_values("Активность", ascending=False)
+
+Первый ньюанс - вывод изображения в отчет. Можно выбрать стандартный способ - сохранить изображения в файл, 
+загрузить его из файла ( временный файл потом удалить). Но будет использован BytesIO для временного хранения 
+бинарных данных изображения.  И его дальнейшего преобразования в base64 формат:
+parks.head(10)["Активность"].plot.pie(ax=area, label="")
+plt.show()
+
+После сохранения изображения по этому указателю можно его преобразовать в бинарные данные в base64 формату декодированные в utf-8:
+img = BytesIO()
+plt.savefig(img)
+img = "data:image/png;base64," + binascii.b2a_base64(img.getvalue(),
+                                                    newline=False).decode("UTF-8")
+Второй ньюанс - pandas ограничивает по умолчанию длину в ячейках, поэтому зададим настройку через set_option для вывода полного расписания активности каждого парка в html таблице:
+
+pd.set_option("display.max_colwidth", 1000)
+html = '''<ntml>
+<head>
+        <title>Активности в парках Москвы</title>
+        <meta charset="utf-8/">
+    </head>
+<body>
+<h1>Активности в парках Москвы</h1>
+<img src="''' + img + '''" alt = "Популярные парки/">
+        '''+ data.to_html(index=False) + '''
+        </body>
+</html>'''
+config  = pdfkit.configuration(wkhtmltopdf = "C:/Program Files/wkhtmltopdf/bin/wkhtmltopdf.exe")
+options = {
+    'page-size': 'A4',
+    'header-right': '[page]'
+}
+pdfkit.from_string(html, 'parks.pdf',
+                  configuration = config, options=options)
+with open("parks.html", "w", encoding = "utf-8") as file:
+    file.write(html)
+    
+Тайцзицюань:  1
+Loading pages (1/6)
+Counting pages (2/6)                                               
+Resolving links (4/6)                                                       
+Loading headers and footers (5/6)                                           
+Printing pages (6/6)
+Done   
+```
+
+
 
